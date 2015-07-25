@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="X-UA-Compatible" content="chrome=1" />
+  <script src="js/buffer-loader.js" type="text/javascript"/></script>
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.0.2/jquery.min.js"></script>
+  <title>Web Audio API: Simple load + play</title>
+</head>
+<body>
+  <button onclick="playSound()" disabled>Start</button>
+  <button onclick="stopSound()" disabled>Pause</button>
+  <button onclick="printTime()" disabled>Get time</button>
+  <button id="viewMap" onclick="viewCratedMap()" disabled>View Map</button>
+  <audio id="mainAudio" controls>
+    <source id="mp3Source" type="audio/mp3"></source>
+  </audio>
+  <table>
+  	<tr>
+      <td><div id="info"></div></td>
+      <td><div id="timeInfo"></div></td>
+      <td><div id="keyInfo"></div></td>
+  	</tr>
+  </table>
+<script>
+var supportAudio = false;
+
+var context = null;
+var source = null;
+var bufferL = null;
+
+var audioElement = document.getElementById('mainAudio');
+
+var startTime =  0;
+var startToPlayTime = 0;
+var doneLoadingTime = 0;
+
+var noteMapCreated = {};
+
+initLoader();
+
+function stopSound() {
+	audioElement.pause();
+}
+
+function playSound() {
+	startToPlayTime = new Date().getTime();
+	audioElement.play();
+}
+
+function initLoader() {
+	addInfo("Begin","info");
+	
+	
+	//Ham moi
+	addThongTinNhacBangAudioTag("http://www.nhomvl.com/ping.mp3");
+	
+	startTime = new Date().getTime();
+	//bufferLoader.load();
+	
+	//Add su kien
+	document.addEventListener("keypress", keyPressed,false);
+}
+
+function initAudioApi() {
+	try {
+		// Fix up for prefixing
+		window.AudioContext = window.AudioContext||window.webkitAudioContext;
+		context = new AudioContext();
+		supportAudio = true;
+		
+		// Neu ho tro thi bat dau load du lieu phu (hieu ung)
+		/*
+		bufferLoader = new BufferLoader(
+			context,
+			[
+			  'wwww.nhomvl.com/ping.mp3',
+			],
+			finishedLoadingBuffer
+			);
+		*/	
+	}
+	catch(e) {  
+		supportAudio = false;
+		alert('Web Audio API is not supported in this browser, but don"t worry');
+	}
+}
+
+function addThongTinNhacBangAudioTag(url) {
+	addInfo("Loadind...","info");
+	//Add nhac vo
+	$('#mp3Source')
+    .attr('src',url)
+    .detach().appendTo($("#mainAudio"));
+	
+	//Add su kien load nhac xong (canplaythrough)
+	audioElement.addEventListener("canplaythrough", doneLoading,false);
+	
+	//Danh cho web audio api (neu ho tro)
+	if(supportAudio){
+		var source = context.createMediaElementSource(audioElement);
+		source.connect(context.destination);
+	}
+}
+
+function doneLoading(){
+	doneLoadingTime = new Date().getTime();
+	addInfo("Done in "+ (doneLoadingTime - startTime)+" ms","info");
+	
+	//Bat cac nut
+	var buttons = $('button');
+	buttons[0].disabled = false;
+	buttons[1].disabled = false;
+	buttons[2].disabled = false;
+}
+
+/*
+function finishedLoadingBuffer(bufferList) {
+	//Xuat thoi gian load
+	doneLoadingTime = new Date().getTime();
+	addInfo("Done in "+ (doneLoadingTime - startTime)+" ms","info");	
+	addInfo("Loaded context time  "+context.currentTime+" s","info");
+	
+	//Tao source
+	source = context.createBufferSource();
+	source.buffer = bufferList[0];	
+	source.connect(context.destination);
+	
+	//Mo button
+	var buttons = document.querySelectorAll('button');
+	buttons[0].disabled = false;
+	buttons[1].disabled = false;
+	buttons[2].disabled = false;
+
+}
+*/
+
+function printTime(){
+	document.getElementById("timeInfo").innerHTML = "Current time: " + audioElement.currentTime * 1000;
+	return (audioElement.currentTime * 1000);
+	
+	//Code cu
+	/*
+	if(supportAudio) {
+		var info = "";
+		info += "Curent time: " + (context.currentTime * 1000) +"<br/>";
+		info += "startTime: " + (startTime) +"<br/>";
+		info += "startToPlayTime: " + (startToPlayTime) +"<br/>";
+		
+		var fromBeginToPressPlayTime = startToPlayTime - doneLoadingTime;
+		info += "Track time: " + (context.currentTime * 1000 -  fromBeginToPressPlayTime) +"<br/>";
+		
+		document.getElementById("timeInfo").innerHTML = info;
+		//alert(((context.currentTime * 1000)) / 1000);
+		
+		return (context.currentTime * 1000 -  fromBeginToPressPlayTime);
+	} else {
+		document.getElementById("timeInfo").innerHTML = "Current time: " + audioElement.currentTime * 1000;
+		return (audioElement.currentTime * 1000);
+	}
+	*/
+}
+function keyPressed(e) {
+	var time = printTime();
+	var key = String.fromCharCode(e.which);
+	document.getElementById("keyInfo").innerHTML = "Key: "+ key
+														+ "<br/>Time: "+time;
+	
+	//Tao map de chua cac phim an													
+	noteMapCreated[Math.round(time)] = key;														
+	
+	//Mo khoa nut view
+	document.getElementById("viewMap").disabled = false;
+}
+function addInfo(str,divID){
+	var old = document.getElementById(divID).innerHTML;
+	old += "<br/>"+str;
+	document.getElementById(divID).innerHTML = old;
+}
+
+function viewCratedMap(){
+	$.each( noteMapCreated, function( key, value ) {
+		addInfo(key + " : "+ value,"keyInfo");
+	});
+	
+	//alert(window.JSON.stringify(noteMapCreated));
+	
+   $.ajax({
+	   url: "RecordNote",
+	   type: 'POST',
+	   data: window.JSON.stringify(noteMapCreated),
+	   dataType:'json'
+	 });
+	 
+}
+</script>
+</body>
+</html>

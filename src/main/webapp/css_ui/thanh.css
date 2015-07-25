@@ -1,0 +1,40 @@
+.fullWidth{
+	width: 100%
+}
+.left {
+	float: left;
+}
+.right{
+	float: right;
+}
+.clearfix{
+	float: none;
+	clear: both;
+}
+.center{
+	margin: auto;
+}
+.fullBackground{
+  -webkit-background-size: cover;
+  -moz-background-size: cover;
+  -o-background-size: cover;
+  background-size: cover;
+  
+}
+.animatedDiv{
+	transition: 1s; 
+	-webkit-transition: 1s; 
+	-moz-transition: 1s; 
+	
+	transition-property:width,height,display;
+	-webkit-transition-property:width,height,display;
+	-moz-transition-property:width,height,display;
+	
+}
+.whiteCl{
+	color: white;
+}
+.hiddenDiv{
+	width: 0px;
+	height: 0px;
+}

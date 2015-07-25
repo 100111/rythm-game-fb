@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="X-UA-Compatible" content="chrome=1" />
+  <script src="js/pixi.dev.js"></script>
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.0.2/jquery.min.js"></script>
+   <script src="js/supportJS.js"></script>
+  <title>Web Audio API: Simple load + play</title>
+</head>
+<body>
+<div id="mainDiv" style="margin:auto; width:1000px;">
+    <audio id="mainAudio" style="display:none" controls>
+	    <source id="mp3Source" type="audio/mp3"></source>
+    </audio>
+	<table>
+    	<tr>
+        	<td><button onclick="beginPlay()" disabled>Start</button>
+            	<button onclick="pauseSound()" disabled>Pause</button></td>
+            <td><h1>Rhythm game</h1></td>
+            <td><button onclick="" disabled>Get Info</button></td>
+        </tr>
+		<tr>
+			<td colspan="3" align="center">	
+				<div id="loading" style="width: 800px; height: 600px; border: 1px solid black;">
+					Loading...
+				</div>
+				<div id="mainGraphic" style="width: 800px; height: 600px; border: 1px solid black; display: none;"></div>
+			</td>
+		</tr>
+		<tr>
+		    <td><div id="info"></div></td>
+		    <td><div id="dataInfo"></div></td>
+		    <td><div id="keyInfo"></div></td>
+		</tr>
+	 </table>
+</div>
+<script>
+	
+	/*--------------------------------- Audio var ---------------------------------*/
+	var supportAudio = false; //Co ho tro web audio hay ko ?
+	
+	var context = null;
+	var source = null;
+	var bufferL = null;
+	
+	var audioElement = document.getElementById('mainAudio');
+	
+	var startTime =  0;
+	var doneLoadingTime = 0;
+	var startToPlayTime = 0;
+	var playing = false;
+	
+	//Danh sach tat ca cac note (load tu server)
+	var noteMap = {};
+	var noteKeyArr = new Array();
+
+	/*--------------------------------- Pixi var (use for GL) ---------------------------------*/
+	var speed = 0.0025*145;
+	var width = 800; var height = 600;
+	var playWidth = 120;
+	// create an new instance of a pixi stage
+	var stage = new PIXI.Stage(0x00FFFF,true);
+	// create a renderer instance
+	var renderer = PIXI.autoDetectRenderer(width, height);
+	//Tao danh sach cac doi tuong note, landing, bar
+	var notes = {};var landings = {}; var bars = {}; var keySuggesst = {}
+	
+	//Create all texture
+	var barTex = PIXI.Texture.fromImage("images/bar.png");
+	var landingTex = PIXI.Texture.fromImage("images/landing.png");
+	var landingLightTex = PIXI.Texture.fromImage("images/landing_light.png");
+	var landingRedTex = PIXI.Texture.fromImage("images/landing_red.png");
+	var landingGreenTex = PIXI.Texture.fromImage("images/landing_green.png");
+	var noteTex = PIXI.Texture.fromImage("images/note.png");
+
+	//Tao map quan ly dieu khien
+	var keyMaping = {"0":"a","1":"s","2":"k","3":"l"};
+
+	var score = 0;
+	
+	/*--------------------------------- Initciating code ---------------------------------*/
+	//Kiem tra co ho tro audio ?, neu co thi tao ra cac doi tuong can thiet
+	initAudioAPI();
+	
+	//Load du lieu nhac vao tag audio
+	initLoader();
+	
+	//Load du lieu cac hieu ung phu khi co ho tro Audio API
+	//initBufferSound();
+	
+	//Load du lieu note tu server
+	getNoteData();
+	
+	//Khoi tao cac phan tu Pixi
+	//initPixiComp();
+	
+	//Bat cac su kien 
+	bidingEventListener();
+	
+	/*--------------------------------- Audio Function List ---------------------------------*/
+	function initLoader() {
+		addInfo("Begin","info");
+		startTime = new Date().getTime();
+		
+		//Dua nhac vao, sau nay the lai bang link tu server
+		addThongTinNhacBangAudioTag("https://ia700200.us.archive.org/1/items/testmp3testfile/mpthreetest.mp3");
+		
+	}
+	function initAudioAPI(){
+		try {
+			// Fix up for prefixing
+			window.AudioContext = window.AudioContext||window.webkitAudioContext;
+			context = new AudioContext();
+			supportAudio = true;
+		}
+		catch(e) {  
+			supportAudio = false;
+			alert('Web Audio API is not supported in this browser, but don"t worry');
+		}
+	}
+	
+	function addThongTinNhacBangAudioTag(url) {
+		addInfo("Loadind music...","info");
+		
+		//Add nhac vo
+		$('#mp3Source')
+		.attr('src',url)
+		.detach().appendTo($("#mainAudio"));
+		
+		//Add su kien load nhac xong (canplaythrough)
+		audioElement.addEventListener("canplaythrough", doneLoadingMainAudio,false);
+		audioElement.addEventListener("ended", endMusic,false);
+		
+		//Danh cho web audio api (neu ho tro)
+		if(supportAudio){
+			var source = context.createMediaElementSource(audioElement);
+			source.connect(context.destination);
+		}
+	}
+
+	function getCurrentTime(){
+		return Math.round(audioElement.currentTime * 1000);
+	}
+	
+	/*------------------------------ Server Interaction Function List ------------------------------*/
+	function getNoteData() {
+		addInfo("Begin getting note data...","info");
+		
+		//Lay du lieu
+		$.getJSON( "MusicLoader", { num : "1" } )
+		.done(function( data ) {
+			addInfo("Note data loaded","info");
+			var i = 0;
+			$.each( data, function( key, value ) {
+				//addInfo(key + " : "+ value,"keyInfo");
+				noteMap[key] = value;
+				
+				noteKeyArr[i] = key;
+				i++;
+			});
+			/////////////////////////////////////////////////
+			initPixiComp();
+		})
+		.fail(function( jqxhr, textStatus, error ) {
+		  var err = textStatus + ', ' + error;
+		  addInfo("Error note data: "+err,"info");
+		});
+
+		
+	}
+		
+	
+	/*--------------------------------- Pixi Function List ---------------------------------*/
+	function initPixiComp(){
+		// add the renderer view element to the DOM
+		document.getElementById("mainGraphic").appendChild(renderer.view);
+		requestAnimFrame( animate );
+
+		createBars();
+		createLandings();
+		//createKeySuggest();
+		
+		createNotes();
+
+		/*
+		var goodText = new PIXI.Text("Good", {font: "bold 60px Arvo", fill: "#006900", align: "center", stroke: "#0abc0a", strokeThickness: 7});
+		var missText =new PIXI.Text("Miss", {font: "bold italic 60px Arvo", fill: "#6e0000", align: "center", stroke: "#d02626", strokeThickness: 7});
+
+		goodText.anchor.x = 0.5;
+		goodText.anchor.y = 0.5;
+
+		missText.anchor.x = 0.5;
+		missText.anchor.y = 0.5;
+
+		missText.position.y = height/2 + 200;
+		goodText.position.y = height/2 + 200;
+
+		stage.addChild(goodText);
+		stage.addChild(missText);
+		*/
+	}
+
+	function createBars(){
+		//Tao 4 cai bar
+		for(var i = 0; i< 4; i++){
+			bars[i] = new PIXI.Sprite(barTex);
+			bars[i].anchor.x = 0.5;
+			bars[i].anchor.y = 0.5;
+			bars[i].position.x = width/2 + (playWidth * (i - 1.5));
+			bars[i].position.y = height/2;
+			stage.addChild(bars[i]);
+		}
+	}
+
+	function createLandings(){
+		//Tao 4 nut landing
+		for(var i = 0; i< 4; i++){
+			landings[i] = new PIXI.Sprite(landingTex);
+			landings[i].buttonMode = true;
+			
+			landings[i].anchor.x = 0.5;
+			landings[i].anchor.y = 0.5;
+			landings[i].position.x = width/2 + (playWidth * (i - 1.5));
+			landings[i].position.y = height/2 + 200;	
+
+			//Interact
+			landings[i].setInteractive(true);
+								
+			// set the mousedown and touchstart callback..
+			landings[i].mousedown = landings[i].touchstart = function(data){
+				this.isdown = true;
+				this.setTexture(landingLightTex);
+				this.alpha = 1;
+
+				//Code dung de bat su kien, tuong ung voi ham keyPress
+				processButtonCallback(data.target);
+			}
+
+			// set the mouseup and touchend callback..
+			landings[i].mouseup = landings[i].touchend = landings[i].mouseupoutside = landings[i].touchendoutside = function(data){
+				this.isdown = false;
+				if(!this.isOver)
+				{
+					this.setTexture(landingTex);
+				}
+			}
+			
+			stage.addChild(landings[i]);
+		}
+	}
+
+	function createNotes(){
+		$.each( noteMap, function( key, value ) {
+			notes[key] = new PIXI.Sprite(noteTex);
+			
+			notes[key].anchor.x = 0.5;
+			notes[key].anchor.y = 0.5;
+			
+			switch (value) {
+			case "a" :
+				notes[key].position.x = width/2 + (playWidth * (0 - 1.5));
+				break;
+			case "s" :
+				notes[key].position.x = width/2 + (playWidth * (1 - 1.5));
+				break;
+			case "k" :
+				notes[key].position.x = width/2 + (playWidth * (2 - 1.5));
+				break;
+			case "l" :
+				notes[key].position.x = width/2 + (playWidth * (3- 1.5));
+				break;	
+			}
+			
+			
+			notes[key].position.y = -1000;
+
+			stage.addChild(notes[key]);
+		});
+	}
+
+	function createKeySuggest(){
+		for(var i = 0; i< 4; i++){
+			var tempKey;
+			switch (i) {
+			case 0 :
+				tempKey = "A";
+				break;
+			case 1 :
+				tempKey = "S";
+				break;
+			case 2 :
+				tempKey = "K";
+				break;
+			case 3 :
+				tempKey = "L";
+				break;	
+			}
+			
+			keySuggesst[i] = new PIXI.Text(tempKey, {font:"24px Arial", fill:"white"});
+			keySuggesst[i].anchor.x = 0.5;
+			keySuggesst[i].anchor.y = 0.5;
+			keySuggesst[i].position.x = width/2 + (playWidth * (i - 1.5));
+			keySuggesst[i].position.y = height/2 + 200;	
+			stage.addChild(keySuggesst[i]);
+		}
+	}
+	
+	function animate() {
+	    requestAnimFrame( animate );
+
+		if (playing) {
+		    //Code animate note
+			
+			var time = getCurrentTime();
+			var delta; var key;
+
+			//Tao bien chua not sap dc xu ly
+			var lanedID = -1;
+				
+			for (var i = 0; i< noteKeyArr.length; i++) {
+				key = noteKeyArr[i];
+				delta = time - Number(key);
+
+				//Thay doi vi tri
+				if (delta > -2000) {
+					notes[key].position.y = (height/2) + 200 + (delta * speed);
+				}
+
+				//Dua vao list de xu ly
+				if(delta > 40) {
+					lanedID = i;
+				}	
+			}
+			
+			if(lanedID > -1) {
+				checkHit(lanedID);	
+			}
+		}
+	    // render the stage   
+	    renderer.render(stage);
+	}
+
+	function processButtonCallback(targetSprite){
+		currentKeyTime = getCurrentTime();
+		
+		for (var i = 0; i< 4; i++) {
+			if(landings[i] == targetSprite){
+				currentKey = keyMaping[i];
+			}
+		}
+		
+		addInfo(currentKeyTime+" - "+currentKey,"info");
+	}
+	/*--------------------------------- Event Handeling Function List ---------------------------------*/
+	function bidingEventListener(){
+		//Add su kien nut
+		document.addEventListener("keypress", keyPressed,false);
+		document.addEventListener("keyup", keyUp,false);
+	}
+	
+	function doneLoadingMainAudio(){
+		doneLoadingTime = new Date().getTime();
+		addInfo("Music loaded in "+ (doneLoadingTime - startTime)+" ms","info");
+		addInfo("Play speed : "+ audioElement.playbackRate+" ","info");
+		//Bat cac nut
+		var buttons = $('button');
+		buttons[0].disabled = false;
+		buttons[1].disabled = false;
+		buttons[2].disabled = false;
+		document.getElementById("loading").style.display = "none";
+		document.getElementById("mainGraphic").style.display = "block";
+	}
+
+	var tempI = 3;
+	var timeCount = {};
+	function beginPlay(){
+		var intCountInterv = self.setInterval(function(){
+			if(tempI < 3){
+				timeCount[tempI+1].position.x = -100;
+				
+			}
+			if(tempI == 0) {
+				self.clearInterval(intCountInterv);
+				playSound();
+			} else {
+				timeCount[tempI] = new PIXI.Text(tempI+"", {font:(30 + tempI*5)+"px Arial", fill:"black"});
+				timeCount[tempI].anchor.x = 0.5;
+				timeCount[tempI].anchor.y = 0.5;
+				timeCount[tempI].position.x = width/2;
+				timeCount[tempI].position.y = height/2;	
+				stage.addChild(timeCount[tempI]);
+				tempI--;
+			}
+		},1000);
+		
+	}
+
+	function endMusic(){
+		addInfo("Score: "+score,"info");
+	}
+
+	function playSound() {
+		startToPlayTime = new Date().getTime();
+		playing = true;
+		audioElement.play();
+	}
+	function pauseSound() {
+		audioElement.pause();
+		playing = false;
+	}
+
+	var currentKeyTime = 0;var currentKey;
+	function keyPressed(e) {
+		currentKeyTime = getCurrentTime();
+		currentKey = String.fromCharCode(e.which);
+		
+		landings[getKeyI(currentKey)].setTexture(landingLightTex);
+	}
+	
+	function keyUp(e) {
+		currentKeyTime = getCurrentTime();
+		currentKey = String.fromCharCode(e.which);
+		
+		landings[getKeyI(currentKey)].setTexture(landingTex);
+	}
+	
+	function getKeyI(keyCode){
+		var i = -1;
+		switch (keyCode.toLowerCase()) {
+			case "a" :
+				i = 0;
+				break;
+			case "s" :
+				i = 1;
+				break;
+			case "k" :
+				i = 2;
+				break;
+			case "l" :
+				i = 3;
+				break;	
+		}
+		return i;
+	}
+	
+	var count = 0;
+	function checkHit(lanedID) {
+		count++;
+		var noteKey = noteKeyArr[lanedID];
+		addInfo("Count: "+count + ", time: "+noteKey+", key: "+ noteMap[noteKey],"dataInfo");
+		
+		notes[noteKey].visible = false;
+		
+		noteKeyArr.remove(lanedID);
+
+		//Kiem tra
+		var delta2 = Math.abs(currentKeyTime - getCurrentTime());
+		var temp1 = currentKey.toLowerCase();
+		var temp2 = noteMap[noteKey];
+		var tempI = getKeyI(temp2);
+		
+		if(delta2 < 200) {
+			if(temp1 == temp2){
+				score += Math.round(1000/((70-delta2)/2 + delta2));
+				landings[tempI].setTexture(landingGreenTex);
+				addInfo("Hit: "+delta2+", Score: "+score,"keyInfo");
+			} else {
+				landings[tempI].setTexture(landingRedTex);
+				addInfo("Wrong key: "+delta2,"keyInfo");
+			}
+			
+		} else {
+			landings[tempI].setTexture(landingRedTex);
+			addInfo("Miss: "+delta2,"keyInfo");
+		}
+		
+	}
+	
+	
+	</script>
+</body>
+</html>
